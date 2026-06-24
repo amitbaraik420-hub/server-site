@@ -157,7 +157,7 @@ app.post('/api/v1/login', async (req, res) => {
 const { getUserProfile } = require('./userController');
 
 
-app.get('/api/v1/profile', verifyToken, (req, res) => {
+app.get('/api/v1/profile' , (req, res) => {
     getUserProfile(req, res, usersCollection);
 });
 
