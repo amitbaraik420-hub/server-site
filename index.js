@@ -8,11 +8,11 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 8000;
 
-// মিডলওয়্যার
+
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
+
 const uri = process.env.MONGO_URI || "mongodb://blood:wEbDDnLtIco9e735@ac-hsq8z3i-shard-00-00.dnimeu3.mongodb.net:27017,ac-hsq8z3i-shard-00-01.dnimeu3.mongodb.net:27017,ac-hsq8z3i-shard-00-02.dnimeu3.mongodb.net:27017/?ssl=true&replicaSet=atlas-yukkn2-shard-0&authSource=admin&appName=Cluster0";
 
 const client = new MongoClient(uri, {
@@ -23,7 +23,7 @@ const client = new MongoClient(uri, {
     }
 });
 
-// কালেকশন ভেরিয়েবলসমূহ
+
 let database;
 let usersCollection;
 let districtsCollection;
@@ -33,7 +33,7 @@ let fundingCollection;
 
 async function run() {
     try {
-        console.log("MongoDB তে কানেক্ট হওয়ার চেষ্টা করা হচ্ছে...");
+        console.log("MongoDB demo insert...");
         await client.connect();
         database = client.db("blood-doner");
         
@@ -43,14 +43,14 @@ async function run() {
         donationRequestsCollection = database.collection("blood-collection");
         fundingCollection = database.collection("fundings");
         
-        console.log("🟢 MongoDB তে সফলভাবে কানেক্ট হয়েছে!");
+        console.log("🟢 MongoDB is sucessfully!");
 
-        // ⚡ কালেকশনগুলো অ্যাসাইন হওয়ার ঠিক পরে ডাটা সিড করার লজিক
+     
         const districtCount = await districtsCollection.countDocuments();
-        console.log(`বর্তমান ডিস্ট্রিক্ট সংখ্যা: ${districtCount}`);
+        console.log(`prejent districts number: ${districtCount}`);
 
         if (districtCount === 0) {
-            console.log("📥 ডাটাবেজ খালি! ডেমো ডাটা ইনসার্ট করা হচ্ছে...");
+            console.log("the database is empty! Inserting demo data...");
             const tempDistricts = [
                 { "id": "1", "district_id": "1", "name": "Comilla", "bn_name": "কুমিল্লা" },
                 { "id": "2", "district_id": "2", "name": "Feni", "bn_name": "ফেনী" }
@@ -64,20 +64,17 @@ async function run() {
             const dRes = await districtsCollection.insertMany(tempDistricts);
             const uRes = await upazilasCollection.insertMany(tempUpazilas);
             
-            console.log(`⚡ [SUCCESS] ডাটাবেজে ${dRes.insertedCount}টি জেলা এবং ${uRes.insertedCount}টি উপজেলা যোগ হয়েছে!`);
+            console.log(`⚡ [SUCCESS] database ${dRes.insertedCount} districts and ${uRes.insertedCount} upazilas inserted!`);
         } else {
-            console.log("ℹ️ ডাটাবেজে ইতিমধ্যে ডাটা আছে, তাই নতুন করে সিড করা হয়নি।");
+            console.log("database already has data. no need to insert demo data");
         }
 
     } catch (error) {
-        console.error("❌ MongoDB কানেকশন বা সিডিং এরর:", error);
+        console.error("mongodb data error:", error);
     }
 }
 run();
 
-// ==========================================
-// 🛡️ JWT & ROLE VERIFICATION MIDDLEWARES
-// ==========================================
 
 const verifyToken = (req, res, next) => {
     if (!req.headers.authorization) {
@@ -103,9 +100,6 @@ const verifyAdmin = async (req, res, next) => {
 };
 
 
-// ==========================================
-// 🔐 AUTHENTICATION & USER APIs
-// ==========================================
 
 app.post('/api/v1/register', async (req, res) => {
     try {
@@ -159,20 +153,15 @@ app.post('/api/v1/login', async (req, res) => {
 });
 
 
-// ==========================================
-// 👤 USER PROFILE API
-// ==========================================
-const { getUserProfile } = require('./userController'); // কন্ট্রোলার ইম্পোর্ট
 
-// 🔒 প্রটেক্টড প্রোফাইল রাউট (টোকেন ভেরিফাই করে ইউজারের ডাটা পাঠাবে)
+const { getUserProfile } = require('./userController');
+
+
 app.get('/api/v1/profile', verifyToken, (req, res) => {
     getUserProfile(req, res, usersCollection);
 });
 
 
-// ==========================================
-// 📍 LOCATION APIs (উইথ ফোর্সড ব্যাকআপ লজিক)
-// ==========================================
 
 app.get('/api/v1/districts', async (req, res) => {
     try {
@@ -220,9 +209,9 @@ app.get('/api/v1/upazilas', async (req, res) => {
 app.get('/api/v1/donors/search', async (req, res) => {
     try {
         const { bloodGroup, district, upazila } = req.query;
-        let query = { role: 'donor', status: 'active' }; // শুধু একটিভ ডোনারদের খুঁজবো
+        let query = { role: 'donor', status: 'active' }; 
 
-        // ফ্রন্টঅ্যান্ড থেকে ফিল্টার পাঠালে কুয়েরিতে যোগ হবে
+       
         if (bloodGroup) query.bloodGroup = bloodGroup;
         if (district) query.district = district;
         if (upazila) query.upazila = upazila;
@@ -234,14 +223,12 @@ app.get('/api/v1/donors/search', async (req, res) => {
     }
 });
 
-// ==========================================
-// 🩸 CREATE BLOOD DONATION REQUEST API
-// ==========================================
+
 app.post('/api/v1/donation-requests', verifyToken, async (req, res) => {
     try {
         const requestData = req.body;
         
-        // ফ্রন্টএন্ড থেকে আসা ডাটা সাজিয়ে নেওয়া
+       
         const newRequest = {
             requesterName: requestData.requesterName,
             requesterEmail: requestData.requesterEmail,
@@ -253,7 +240,7 @@ app.post('/api/v1/donation-requests', verifyToken, async (req, res) => {
             upazila: requestData.upazila,
             donationDate: requestData.donationDate,
             donationTime: requestData.donationTime,
-            deliveryStatus: 'pending', // ডিফল্ট স্ট্যাটাস পেন্ডিং থাকবে
+            deliveryStatus: 'pending',
             createdAt: new Date()
         };
 
@@ -264,12 +251,10 @@ app.post('/api/v1/donation-requests', verifyToken, async (req, res) => {
     }
 });
 
-// ==========================================
-// 🩸 GET ALL BLOOD DONATION REQUESTS API
-// ==========================================
+
 app.get('/api/v1/donation-requests', async (req, res) => {
     try {
-        // নতুন রিকোয়েস্টগুলো আগে দেখানোর জন্য sort({ _id: -1 }) ব্যবহার করা হয়েছে
+       
         const requests = await donationRequestsCollection.find().sort({ _id: -1 }).toArray();
         res.send(requests);
     } catch (error) {
@@ -277,12 +262,10 @@ app.get('/api/v1/donation-requests', async (req, res) => {
     }
 });
 
-// ==========================================
-// 🔐 GET SPECIFIC USER'S DONATION REQUESTS
-// ==========================================
+
 app.get('/api/v1/my-donation-requests', verifyToken, async (req, res) => {
     try {
-        // verifyToken মিডলওয়্যার থেকে ইউজারের ইমেইল নেওয়া হচ্ছে
+       
         const email = req.decoded.email; 
         
         const query = { requesterEmail: email };
@@ -293,8 +276,8 @@ app.get('/api/v1/my-donation-requests', verifyToken, async (req, res) => {
     }
 });
 
-app.get('/blog', (req, res) => res.send('সার্ভার সচল আছে!'));
+app.get('/blog', (req, res) => res.send('server is running'));
 
 app.listen(port, () => {
-    console.log(`সার্ভারটি http://localhost:${port} এ চলছে...`);
+    console.log(`server is running at http://localhost:${port}`);
 });
