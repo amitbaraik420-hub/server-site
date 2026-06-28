@@ -61,7 +61,7 @@ async function seedDemoData() {
     }
 }
 // ব্যাকগ্রাউন্ডে একবার চেক রান করবে
-seedDemoData().then(() => console.log("🟢 MongoDB Check Completed"));
+// seedDemoData().then(() => console.log("🟢 MongoDB Check Completed"));
 
 // ==================== MIDDLEWARES ====================
 
