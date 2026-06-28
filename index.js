@@ -276,14 +276,12 @@ app.get('/api/v1/my-donation-requests', verifyToken, async (req, res) => {
     }
 });
 
-app.get('/blog', (req, res) => res.send('server is running'));
+app.get('/', (req, res) => res.send('server is running'));
 
 // 🟢 Localhost এবং Vercel প্রোডাকশন হ্যান্ডেল করার কন্ডিশন
-if (process.env.NODE_ENV !== 'production') {
-    const port = process.env.PORT || 8000;
+
+ const port = process.env.PORT || 8000;
     app.listen(port, () => {
         console.log(`🚀 server is running at http://localhost:${port}`);
     });
-}
-
 module.exports = app;
