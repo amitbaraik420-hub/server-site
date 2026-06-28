@@ -7,7 +7,12 @@ require('dotenv').config();
 
 const app = express();
 
-app.use(cors());
+// 🟢 CORS সেফ কনফিগারেশন (যাতে Vercel-এ কোনোভাবেই ব্লক না হয়)
+app.use(cors({
+    origin: '*', // প্রোডাকশনে চাইলে সুনির্দিষ্ট ফ্রন্টএন্ড ডোমেন দিতে পারেন
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // MongoDB URI
@@ -21,50 +26,20 @@ const client = new MongoClient(uri, {
     }
 });
 
-// 🟢 ১. অন-ডিমান্ড কালেকশন পাওয়ার সেফ ফাংশন (Vercel-এ কখনো undefined এরর দেবে না)
+// 🟢 ১. অন-ডিমান্ড কালেকশন পাওয়ার সেফ ফাংশন (Vercel-এ কখনো undefined এরর দেবে না)
 async function getCollection(collectionName) {
     if (!client.topology || !client.topology.isConnected()) {
-        // await client.connect();
+        // Vercel Serverless-এর জন্য কানেকশন চেক ও হ্যান্ডেল
+        try {
+            await client.connect();
+        } catch (err) {
+            console.error("MongoDB Connection error inside getCollection:", err);
+        }
     }
     return client.db("blood-doner").collection(collectionName);
 }
 
-// 🟢 ২. ডেমো ডেটা ইনসার্ট করার সেফ ফাংশন
-async function seedDemoData() {
-    try {
-        const districtsCollection = await getCollection("districts");
-        const upazilasCollection = await getCollection("upazilas");
-
-        const districtCount = await districtsCollection.countDocuments();
-        console.log(`Present districts number: ${districtCount}`);
-
-        if (districtCount === 0) {
-            console.log("The database is empty! Inserting demo data...");
-            const tempDistricts = [
-                { "id": "1", "district_id": "1", "name": "Comilla", "bn_name": "কুমিল্লা" },
-                { "id": "2", "district_id": "2", "name": "Feni", "bn_name": "ফেনী" }
-            ];
-            const tempUpazilas = [
-                { "id": "1", "district_id": "1", "name": "Debidwar", "bn_name": "দেবিদ্বার" },
-                { "id": "2", "district_id": "1", "name": "Muradnagar", "bn_name": "মুরাদনগর" },
-                { "id": "3", "district_id": "2", "name": "Chhagalnaiya", "bn_name": "ছাগলনাইয়া" }
-            ];
-
-            await districtsCollection.insertMany(tempDistricts);
-            await upazilasCollection.insertMany(tempUpazilas);
-            console.log("⚡ [SUCCESS] Demo data inserted!");
-        } else {
-            console.log("Database already has data. No need to insert demo data");
-        }
-    } catch (error) {
-        console.error("Mongodb seeding error:", error);
-    }
-}
-// ব্যাকগ্রাউন্ডে একবার চেক রান করবে
-// seedDemoData().then(() => console.log("🟢 MongoDB Check Completed"));
-
-// ==================== MIDDLEWARES ====================
-
+// Middleware
 const verifyToken = (req, res, next) => {
     if (!req.headers.authorization) {
         return res.status(401).send({ message: 'Unauthorized access' });
@@ -151,17 +126,22 @@ app.post('/api/v1/login', async (req, res) => {
     }
 });
 
-const { getUserProfile } = require('./userController');
-
+// প্রোফাইল এপিআই (কন্ট্রোলার ট্রাই-ক্যাচ সেফ রাখা হয়েছে)
+const userController = require('./userController');
 app.get('/api/v1/profile', verifyToken, async (req, res) => {
     try {
         const usersCollection = await getCollection("users");
-        getUserProfile(req, res, usersCollection);
+        if (userController && typeof userController.getUserProfile === 'function') {
+            userController.getUserProfile(req, res, usersCollection);
+        } else {
+            res.status(500).send({ message: "Internal Controller Error" });
+        }
     } catch (error) {
         res.status(500).send({ message: error.message });
     }
 });
 
+// 🟢 ডিস্ট্রিক্ট এপিআই (১০০% সেফ ফলব্যাক সহ)
 app.get('/api/v1/districts', async (req, res) => {
     try {
         const districtsCollection = await getCollection("districts");
@@ -178,31 +158,39 @@ app.get('/api/v1/districts', async (req, res) => {
     }
 });
 
+// 🟢 উপজেলা এপিআই (বাগ ফিক্সড ও সেফ ফলব্যাক সহ)
 app.get('/api/v1/upazilas', async (req, res) => {
     try {
         const upazilasCollection = await getCollection("upazilas");
-        const districtId = req.query.districtId;
+        
+        // ফ্রন্টএন্ড থেকে district_id অথবা districtId দুই ফরম্যাটই যেন সাপোর্ট করে
+        const districtId = req.query.district_id || req.query.districtId;
         let result = [];
         
         if (districtId) {
-            // 🟢 স্ট্রিং ও নাম্বার উভয় টাইপ চেক করবে যেন খালি অ্যারে না আসে
             result = await upazilasCollection.find({
                 $or: [
                     { district_id: districtId.toString() },
-                    { district_id: Number(districtId) }
+                    { district_id: Number(districtId) },
+                    { district_id: districtId }
                 ]
             }).toArray();
         } else {
             result = await upazilasCollection.find().toArray();
         }
         
+        // ডাটাবেজে যদি ডেটা না থাকে তবে ডেমো ফলব্যাক ডেটা লোড হবে
         if (!result || result.length === 0) {
             const tempUpazilas = [
                 { "id": "1", "district_id": "1", "name": "Debidwar", "bn_name": "দেবিদ্বার" },
                 { "id": "2", "district_id": "1", "name": "Muradnagar", "bn_name": "মুরাদনগর" },
                 { "id": "3", "district_id": "2", "name": "Chhagalnaiya", "bn_name": "ছাগলনাইয়া" }
             ];
-            result = districtId ? tempUpazilas.filter(u => u.district_id === districtId.toString()) : tempUpazilas;
+            if (districtId) {
+                result = tempUpazilas.filter(u => u.district_id.toString() === districtId.toString());
+            } else {
+                result = tempUpazilas;
+            }
         }
         res.send(result);
     } catch (error) {
@@ -278,10 +266,10 @@ app.get('/api/v1/my-donation-requests', verifyToken, async (req, res) => {
 
 app.get('/', (req, res) => res.send('server is running'));
 
-// 🟢 Localhost এবং Vercel প্রোডাকশন হ্যান্ডেল করার কন্ডিশন
+// 🟢 Localhost এবং Vercel হ্যান্ডেল করার জন্য সঠিক লিসেনার
+const port = process.env.PORT || 8000;
+app.listen(port, () => {
+    console.log(`🚀 server is running at http://localhost:${port}`);
+});
 
- const port = process.env.PORT || 8000;
-    app.listen(port, () => {
-        console.log(`🚀 server is running at http://localhost:${port}`);
-    });
 module.exports = app;
