@@ -24,7 +24,7 @@ const client = new MongoClient(uri, {
 // 🟢 ১. অন-ডিমান্ড কালেকশন পাওয়ার সেফ ফাংশন (Vercel-এ কখনো undefined এরর দেবে না)
 async function getCollection(collectionName) {
     if (!client.topology || !client.topology.isConnected()) {
-        await client.connect();
+        // await client.connect();
     }
     return client.db("blood-doner").collection(collectionName);
 }
